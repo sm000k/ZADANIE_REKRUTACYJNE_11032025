@@ -25,9 +25,6 @@ public class GitHubService {
     @RestClient
     GitHubClient gitHubClient;
 
-    @Inject
-    TokenManager tokenManager;
-
     public static class Repository {
 
         String name;
@@ -82,16 +79,15 @@ public class GitHubService {
   
  // Metoda zwracająca listę nazw repozytoriów bez użycia Mutiny
       public List<GitHubRepo> getRepositoriesSync(String username) {
-         String authToken = tokenManager.getAuthToken();
-         List<GitHubRepo> repos = gitHubClient.getRepositoriesSync(username, authToken);
+         List<GitHubRepo> repos = gitHubClient.getRepositoriesSync(username);
  LOGGER.info("Repositories: " + repos);
          return repos;
      }
 
  // Metoda zwracająca listę nazw repozytoriów
  public Uni<List<String>> getRepositoryNames(String username) {
-    String authToken = tokenManager.getAuthToken();
-    return gitHubClient.getRepositories(username, authToken)
+
+    return gitHubClient.getRepositories(username)
 .onItem().invoke(repos -> LOGGER.info("Repositories: " + repos))
             .onItem().transform(repos -> repos.stream()
                     .map(GitHubRepo::getName)
@@ -101,8 +97,8 @@ public class GitHubService {
 
 // Metoda zwracająca listę repozytoriów z branchami
 public Uni<List<GitHubRepoWithBranches>> getAllRepositoriesWithBranches(String username) {
-    String authToken = tokenManager.getAuthToken();
-    return gitHubClient.getRepositories(username, authToken)
+
+    return gitHubClient.getRepositories(username)
         .onFailure().recoverWithUni(e -> {
             LOGGER.error("Failed to get repositories for user: " + username, e);
             throw new UserNotFoundException(404, "User not found");
@@ -115,13 +111,13 @@ public Uni<List<GitHubRepoWithBranches>> getAllRepositoriesWithBranches(String u
             return Multi.createFrom().iterable(nonForkRepos)
                 .onItem().transformToUniAndMerge(repo -> {
                     String repoName = repo.getName();
-                    return gitHubClient.getBranches(username, repoName, authToken)
+                    return gitHubClient.getBranches(username, repoName)
                         .onItem().transformToUni(branchList -> {
                             List<GitHubBranch> sortedBranches = branchList.stream()
                                 .sorted((b1, b2) -> b1.getName().compareToIgnoreCase(b2.getName()))
                                 .collect(Collectors.toList());
                             return Multi.createFrom().iterable(sortedBranches)
-                                .onItem().transformToUniAndMerge(branch -> gitHubClient.getLastCommit(username, repoName, branch.getName(), authToken)
+                                .onItem().transformToUniAndMerge(branch -> gitHubClient.getLastCommit(username, repoName, branch.getName())
                                     .onItem().transform(commit -> {
                                         branch.setLastCommitSha(commit.getSha());
                                         return branch;
